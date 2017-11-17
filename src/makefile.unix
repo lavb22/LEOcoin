@@ -100,7 +100,7 @@ endif
 
 # CXXFLAGS can be specified on the make command line, so we use xCXXFLAGS that only
 # adds some defaults in front. Unfortunately, CXXFLAGS=... $(CXXFLAGS) does not work.
-xCXXFLAGS=-O2 $(EXT_OPTIONS) -pthread -Wall -Wextra -Wno-ignored-qualifiers -Wformat -Wformat-security -Wno-unused-parameter \
+xCXXFLAGS=-std=c++14 -O2 $(EXT_OPTIONS) -pthread -Wall -Wextra -Wno-ignored-qualifiers -Wformat -Wformat-security -Wno-unused-parameter \
     $(DEBUGFLAGS) $(DEFS) $(HARDENING) $(CXXFLAGS)
 
 # LDFLAGS can be specified on the make command line, so we use xLDFLAGS that only
@@ -129,6 +129,7 @@ OBJS= \
     obj/rpcserver.o \
     obj/rpcclient.o \
     obj/rpcdump.o \
+    obj/base58.o \
     obj/rpcnet.o \
     obj/rpcmining.o \
     obj/rpcwallet.o \
@@ -204,7 +205,7 @@ LEOcoind: $(OBJS:obj/%=obj/%)
 
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 
-xTESTCXXFLAGS = -std=c++11
+xTESTCXXFLAGS = -std=c++14
 
 obj-test/%.o: test/%.cpp
 	$(CXX) -c $(TESTDEFS) $(xTESTCXXFLAGS) $(xCXXFLAGS) -MMD -MF $(@:%.o=%.d) -o $@ $<

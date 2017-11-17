@@ -512,6 +512,12 @@ public:
         return Write(std::make_pair(std::string("flag"), name), nValue, true);
     }
 
+    //#########AGREGADO
+
+    bool WriteWatchOnly(const CScript &script, const CKeyMetadata &keymeta);
+    bool EraseWatchOnly(const CScript &script);
+
+    //####FINAGREGADO
 
     bool ReadAccount(const std::string& strAccount, CAccount& account);
     bool WriteAccount(const std::string& strAccount, const CAccount& account);

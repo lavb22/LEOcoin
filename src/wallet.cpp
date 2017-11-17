@@ -15,6 +15,7 @@
 #include "coincontrol.h"
 #include "pbkdf2.h"
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/thread.hpp>
 
 using namespace std;
 
@@ -154,13 +155,13 @@ bool CWallet::AddCryptedKey(const CPubKey &vchPubKey, const vector<unsigned char
     return false;
 }
 
-bool CWallet::LoadKeyMetadata(const CPubKey &pubkey, const CKeyMetadata &meta)
+bool CWallet::LoadKeyMetadata(const CTxDestination &pubkey, const CKeyMetadata &meta)
 {
     AssertLockHeld(cs_wallet); // mapKeyMetadata
     if (meta.nCreateTime && (!nTimeFirstKey || meta.nCreateTime < nTimeFirstKey))
         nTimeFirstKey = meta.nCreateTime;
 
-    mapKeyMetadata[pubkey.GetID()] = meta;
+    mapKeyMetadata[pubkey] = meta;
     return true;
 }
 
@@ -838,7 +839,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, const uint256& hashIn)
 // If fUpdate is true, existing transactions will be updated.
 bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const uint256& hash, const void* pblock, bool fUpdate, bool fFindBlock)
 {
-    //LogPrintf("AddToWalletIfInvolvingMe() %s\n", hash.ToString().c_str()); // happens often
+
 
     //uint256 hash = tx.GetHash();
     {
@@ -886,7 +887,8 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const uint256& ha
         }
 
         if (fExisted || fIsMine || IsMine(tx) || IsFromMe(tx))
-        {
+        {   //LogPrintf("AddToWalletIfInvolvingMe() %s\n", hash.ToString().c_str()); // happens often
+
             CWalletTx wtx(this, tx);
 
             if (!mapNarr.empty())
@@ -8856,15 +8858,18 @@ void CWallet::UpdatedTransaction(const uint256 &hashTx)
     }
 }
 
-void CWallet::GetKeyBirthTimes(std::map<CKeyID, int64_t> &mapKeyBirth) const
+void CWallet::GetKeyBirthTimes(std::map<CTxDestination, int64_t> &mapKeyBirth) const
 {
     AssertLockHeld(cs_wallet); // mapKeyMetadata
     mapKeyBirth.clear();
 
     // get birth times for keys with metadata
-    for (std::map<CKeyID, CKeyMetadata>::const_iterator it = mapKeyMetadata.begin(); it != mapKeyMetadata.end(); it++)
-        if (it->second.nCreateTime)
-            mapKeyBirth[it->first] = it->second.nCreateTime;
+    for (const auto& entry : mapKeyMetadata) {
+        if (entry.second.nCreateTime) {
+            mapKeyBirth[entry.first] = entry.second.nCreateTime;
+        }
+    }
+
 
     // map in which we'll infer heights of other keys
     CBlockIndex *pindexMax = FindBlockByHeight(std::max(0, nBestHeight - 144)); // the tip can be reorganised; use a 144-block safety margin
@@ -8939,7 +8944,8 @@ bool IsMine(const CWallet &wallet, const CScript& scriptPubKey)
     txnouttype whichType;
     if (!Solver(scriptPubKey, whichType, vSolutions))
         return false;
-
+    //CBitcoinAddress test1; Llena el log de muchos mensajes, usar con cuidado
+	bool test2;
     CKeyID keyID;
     switch (whichType)
     {
@@ -8948,10 +8954,17 @@ bool IsMine(const CWallet &wallet, const CScript& scriptPubKey)
         return false;
     case TX_PUBKEY:
         keyID = CPubKey(vSolutions[0]).GetID();
-        return wallet.HaveKey(keyID);
+        //test1.Set(keyID);
+        test2 = wallet.HaveKey(keyID);
+        //LogPrintf("Direccion a verificar: %d y es %d\n", test1.ToString(),test2);
+        return test2;
+
     case TX_PUBKEYHASH:
         keyID = CKeyID(uint160(vSolutions[0]));
-        return wallet.HaveKey(keyID);
+        //test1.Set(keyID);
+        test2 = wallet.HaveKey(keyID);
+        //LogPrintf("Direccion a verificar: %d y es %d\n", test1.ToString(),test2);
+        return test2;
     case TX_SCRIPTHASH:
     {
         CScript subscript;
@@ -8971,5 +8984,75 @@ bool IsMine(const CWallet &wallet, const CScript& scriptPubKey)
     }
     }
     return false;
+}
+
+// ######Agregado por importaddress #####REVISAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAR#
+
+void CWallet::UpdateTimeFirstKey(int64_t nCreateTime)
+{
+    AssertLockHeld(cs_wallet);
+    if (nCreateTime <= 1) {
+        // Cannot determine birthday information, so set the wallet birthday to
+        // the beginning of time.
+        nTimeFirstKey = 1;
+    } else if (!nTimeFirstKey || nCreateTime < nTimeFirstKey) {
+        nTimeFirstKey = nCreateTime;
+    }
+}
+
+bool CWallet::AddWatchOnly(const CScript& dest, int64_t nCreateTime, const CKeyID& destID)
+{
+	mapKeyMetadata[CScriptID(dest)].nCreateTime = nCreateTime;
+	if (!CCryptoKeyStore::AddWatchOnly(dest, destID))
+    return false;
+
+const CKeyMetadata& meta = mapKeyMetadata[CScriptID(dest)];
+UpdateTimeFirstKey(meta.nCreateTime);
+return CWalletDB(strWalletFile).WriteWatchOnly(dest, meta);
+}
+
+
+bool CWallet::RemoveWatchOnly(const CScript &dest)
+{
+    AssertLockHeld(cs_wallet);
+    if (!CCryptoKeyStore::RemoveWatchOnly(dest))
+        return false;
+    if (!CWalletDB(strWalletFile).EraseWatchOnly(dest))
+        return false;
+
+    return true;
+}
+
+bool CWallet::LoadWatchOnly(const CScript &dest)
+{
+	std::vector<valtype> vSolutions;
+	    txnouttype whichType;
+	    CKeyID FKeyID;
+	    if (!Solver(dest, whichType, vSolutions))
+	        return false;
+
+	    switch (whichType)
+	    {
+	    case TX_NONSTANDARD:
+	    	return false;
+	    case TX_NULL_DATA:
+	        return false;
+	    case TX_PUBKEY:{
+	        FKeyID = CPubKey(vSolutions[0]).GetID();
+	        //LogPrintf("Se importo una PUBKEY - ");
+	        break;}
+	    case TX_PUBKEYHASH:{
+	    	FKeyID=CKeyID(uint160(vSolutions[0]));
+	    	//LogPrintf("Se importo una PUBKEYHASH - ");
+	    	break;}
+	    case TX_SCRIPTHASH:
+	    {
+            return false;
+	    }
+	    case TX_MULTISIG:{
+	    	return false;
+	    }
+	    }
+	return CCryptoKeyStore::AddWatchOnly(dest,FKeyID);
 }
 

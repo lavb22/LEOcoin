@@ -9,6 +9,8 @@
 #include "rpcserver.h"
 #include "ui_interface.h"
 #include "base58.h"
+#include "script.h"//for importaddress
+#include "key.h"
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/variant/get.hpp>
@@ -110,6 +112,86 @@ public:
         this->nOut = nOut;
     }
 };
+
+//#####Inicio de codigo agregado para importaddress
+
+void ImportScript(const CScript& script, const std::string& strLabel, const CKeyID& AddID)
+{
+    if (IsMine(*pwalletMain,script)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "The wallet already contains this address or script");
+    }
+
+    int64_t nCreateTime = 1;
+    pwalletMain->MarkDirty();
+
+    if (!pwalletMain->AddWatchOnly(script, 1 /* nCreateTime */, AddID)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error adding address to wallet");
+    }
+
+    pwalletMain->SetAddressBookName(AddID, strLabel);
+
+}
+
+Value importaddress(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 4)
+        throw std::runtime_error(
+            "importaddress \"address\" ( \"label\" rescan )\n"
+            "\nAdds a script (in hex) or address that can be watched as if it were in your wallet but cannot be used to spend.\n"
+            "\nArguments:\n"
+            "1. \"script\"           (string, required) The hex-encoded script (or address)\n"
+            "2. \"label\"            (string, optional, default=\"\") An optional label\n"
+            "3. rescan               (boolean, optional, default=true) Rescan the wallet for transactions\n"
+        	"\nNote: This call can take minutes to complete if rescan is true.\n"
+            "If you have the full public key, you should call importpubkey instead of this.\n"
+            "\nNote: If you import a non-standard raw script in hex form, outputs sending to it will be treated\n"
+            "as change, and not show up in many RPCs."
+        );
+
+
+    std::string strLabel = "";
+    if (params.size() > 1)
+        strLabel = params[1].get_str();
+
+    // Whether to perform rescan after import
+    bool fRescan = true;
+    if (params.size() > 2)
+        fRescan = params[2].get_bool();
+
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    CBitcoinAddress coinAdd;
+
+	coinAdd.SetString(params[0].get_str());
+
+    CKeyID dest;
+
+    LogPrintf("-----Inicio de Importaddress-----\n");
+    LogPrintf("Parametros a utilizar: %d, %d, %d \n",params[0].get_str(), strLabel,fRescan);
+
+    if (coinAdd.IsValid() && coinAdd.GetKeyID(dest)) {
+
+        CScript scriptAdd;
+    	scriptAdd.SetDestination(dest);
+
+        ImportScript(scriptAdd, strLabel, dest);
+
+    } else {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Leocoin address");
+    }
+
+    if (fRescan)
+    {
+        pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
+        pwalletMain->ReacceptWalletTransactions();
+    }
+
+    return Value::null;
+}
+
+//####Fin de codigo agregado para importaddress
+
+
 
 Value importprivkey(const Array& params, bool fHelp)
 {
@@ -307,7 +389,7 @@ Value dumpwallet(const Array& params, bool fHelp)
     if (!file.is_open())
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Cannot open wallet dump file");
 
-    std::map<CKeyID, int64_t> mapKeyBirth;
+    std::map<CTxDestination, int64_t> mapKeyBirth;
 
     std::set<CKeyID> setKeyPool;
 
@@ -317,8 +399,10 @@ Value dumpwallet(const Array& params, bool fHelp)
 
     // sort time/key pairs
     std::vector<std::pair<int64_t, CKeyID> > vKeyBirth;
-    for (std::map<CKeyID, int64_t>::const_iterator it = mapKeyBirth.begin(); it != mapKeyBirth.end(); it++) {
-        vKeyBirth.push_back(std::make_pair(it->second, it->first));
+    for (const auto& entry : mapKeyBirth) {
+        if (const CKeyID* keyID = boost::get<CKeyID>(&entry.first)) { // set and test
+            vKeyBirth.push_back(std::make_pair(entry.second, *keyID));
+        }
     }
     mapKeyBirth.clear();
     std::sort(vKeyBirth.begin(), vKeyBirth.end());

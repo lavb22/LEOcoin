@@ -1061,7 +1061,7 @@ struct tallyitem
     }
 };
 
-Value ListReceived(const Array& params, bool fByAccounts)
+ Value ListReceived(const Array& params, bool fByAccounts)
 {
     // Minimum confirmations
     int nMinDepth = 1;
@@ -1075,6 +1075,7 @@ Value ListReceived(const Array& params, bool fByAccounts)
 
     // Tally
     std::map<CBitcoinAddress, tallyitem> mapTally;
+    LogPrintf("mapWallet.size() = %u\n",                pwalletMain->mapWallet.size());
     for (std::map<uint256, CWalletTx>::iterator it = pwalletMain->mapWallet.begin(); it != pwalletMain->mapWallet.end(); ++it)
     {
         const CWalletTx& wtx = (*it).second;
@@ -1091,7 +1092,7 @@ Value ListReceived(const Array& params, bool fByAccounts)
             CTxDestination address;
             if (!ExtractDestination(txout.scriptPubKey, address) || !IsDestMine(*pwalletMain, address))
                 continue;
-
+            LogPrintf("TX MIA");
             tallyitem& item = mapTally[address];
             item.nAmount += txout.nValue;
             item.nConf = std::min(item.nConf, nDepth);
@@ -1178,10 +1179,13 @@ Value listreceivedbyaccount(const Array& params, bool fHelp)
             "  \"amount\" : total amount received by addresses with this account\n"
             "  \"confirmations\" : number of confirmations of the most recent transaction included");
 
+
+
     accountingDeprecationCheck();
 
     return ListReceived(params, true);
 }
+
 
 static void MaybePushAddress(Object & entry, const CTxDestination &dest)
 {

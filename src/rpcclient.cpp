@@ -168,6 +168,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "thinforcestate", 0 },
     { "importprivkey", 2 },
     { "importprivkey", 3 },
+    { "importaddress", 2},
     { "checkkernel", 0 },
     { "checkkernel", 1 },
     { "submitblock", 1 },

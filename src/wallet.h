@@ -85,6 +85,7 @@ bool IsMine(const CWallet& wallet, const CScript& scriptPubKey);
  */
 class CWallet : public CCryptoKeyStore
 {
+
 public:
     bool SelectCoinsForStaking(int64_t nTargetValue, unsigned int nSpendTime, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet) const;
     bool SelectCoins(int64_t nTargetValue, unsigned int nSpendTime, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet, int64_t& nValueRet, const CCoinControl *coinControl=NULL) const;
@@ -108,7 +109,7 @@ public:
     std::string strWalletFile;
 
     std::set<int64_t> setKeyPool;
-    std::map<CKeyID, CKeyMetadata> mapKeyMetadata;
+    std::map<CTxDestination, CKeyMetadata> mapKeyMetadata;
     
     std::set<CStealthAddress> stealthAddresses;
     StealthKeyMetaMap mapStealthKeyMeta;
@@ -187,7 +188,7 @@ public:
     // Adds a key to the store, without saving it to disk (used by LoadWallet)
     bool LoadKey(const CKey& key, const CPubKey &pubkey) { return CCryptoKeyStore::AddKeyPubKey(key, pubkey); }
     // Load metadata (used by LoadWallet)
-    bool LoadKeyMetadata(const CPubKey &pubkey, const CKeyMetadata &metadata);
+    bool LoadKeyMetadata(const CTxDestination &pubkey, const CKeyMetadata &metadata);
 
     bool LoadMinVersion(int nVersion) { AssertLockHeld(cs_wallet); nWalletVersion = nVersion; nWalletMaxVersion = std::max(nWalletMaxVersion, nVersion); return true; }
 
@@ -197,13 +198,22 @@ public:
     bool LoadCryptedKey(const CPubKey &vchPubKey, const std::vector<unsigned char> &vchCryptedSecret);
     bool AddCScript(const CScript& redeemScript);
     bool LoadCScript(const CScript& redeemScript);
+
+    //#########Agregado para importaddress
     
-    bool Lock();
+    //! Adds a watch-only address to the store, and saves it to disk.
+       bool AddWatchOnly(const CScript& dest, int64_t nCreateTime, const CKeyID& destID);
+       bool RemoveWatchOnly(const CScript &dest) override;
+       //! Adds a watch-only address to the store, without saving it to disk (used by LoadWallet)
+       bool LoadWatchOnly(const CScript &dest);
+    //Fin del agregado
+
+       bool Lock();
     bool Unlock(const SecureString& strWalletPassphrase);
     bool ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
     bool EncryptWallet(const SecureString& strWalletPassphrase);
 
-    void GetKeyBirthTimes(std::map<CKeyID, int64_t> &mapKeyBirth) const;
+    void GetKeyBirthTimes(std::map<CTxDestination, int64_t> &mapKeyBirth) const;
 
 
     /** Increment the next transaction order id
@@ -239,7 +249,7 @@ public:
     
     bool CreateTransaction(const std::vector<std::pair<CScript, int64_t> >& vecSend, CWalletTx& wtxNew, int64_t& nFeeRet, int32_t& nChangePos, const CCoinControl *coinControl=NULL);
     bool CreateTransaction(CScript scriptPubKey, int64_t nValue, std::string& sNarr, CWalletTx& wtxNew, int64_t& nFeeRet, const CCoinControl *coinControl=NULL);
-    
+    void UpdateTimeFirstKey(int64_t nCreateTime);
     bool CommitTransaction(CWalletTx& wtxNew);
     
 
@@ -534,7 +544,6 @@ public:
      */
     boost::signals2::signal<void (CWallet *wallet, const CTxDestination &address, const std::string &label, bool isMine, ChangeType status, bool fManual)> NotifyAddressBookChanged;
     
-
     /** Wallet transaction added, removed or updated.
      * @note called with lock cs_wallet held.
      */
