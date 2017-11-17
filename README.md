@@ -35,3 +35,10 @@ Issues with no commits will be given a similar warning, and closed after
 15 days from their last activity. Issues closed in this manner will be 
 labeled 'stale'.
 
+Changes in this version
+===========================
+
+A support to Watch Only type addresses has been added to the coin through the integration of the "importaddress" function into the source code. 
+
+- Changes in wallet, keystore, rpcdump, db and makefile.unix has been made. 
+
